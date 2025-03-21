@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartIE Platform</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="copie_10marscss.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <!-- Presentation Page -->
+    <div id="presentation" class="centered-container">
+        <div class="presentation-box">
+            <h1 class="logo">SmartIE</h1>
+            <p class="description">
+                The best platform for IE Madrid students.  
+                Get access to past exams, study materials, and smart revision tools.
+            </p>
+            <button class="primary-btn" onclick="showLogin()">Start Revising Smarter</button>
+        </div>
+    </div>
+
+    <!-- Sidebar Navigation (Hidden Until Login) -->
+    <nav id="navbar" class="sidebar" style="display: none;">
+        <button onclick="navigate('offers')">Offers</button>
+        <button onclick="navigate('courses')">My Courses</button>
+        <button onclick="navigate('myinfo')">My Information</button>
+        <button id="adminButton" style="display: none;" onclick="navigate('admin')">Admin Panel</button>
+        <button class="logout-btn" onclick="logout()">Logout</button>
+    </nav>
+
+    <!-- Main Content -->
+    <div id="app"></div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            checkAuth();
+        });
+
+        function checkAuth() {
+            const user = localStorage.getItem("currentUser");
+            if (user) {
+                document.getElementById("presentation").style.display = "none";
+                document.getElementById("navbar").style.display = "flex";
+                // Show admin button only for admin user
+                if (user === 'leo.tran@outlook.fr') {
+                    document.getElementById("adminButton").style.display = "block";
+                }
+                navigate('offers');
+            }
+        }
+
+        function navigate(page) {
+            const app = document.getElementById("app");
+            if (page === 'offers') {
+                loadOffers();
+            } else if (page === 'courses') {
+                loadMyCourses();
+            } else if (page === 'myinfo') {
+                loadUserInfo();
+            } else if (page === 'admin') {
+                loadAdminPanel();
+            }
+        }
+
+        function showLogin() {
+            document.getElementById("presentation").style.display = "none";
+            document.getElementById("app").innerHTML = `
+                <div class="auth-container">
+                    <h1>Login</h1>
+                    <div id="login-error" class="error-message" style="display: none;"></div>
+                    <input type="email" id="login-email" placeholder="Email Address">
+                    <input type="password" id="login-password" placeholder="Password">
+                    <button class="auth-btn" onclick="login()">Sign In</button>
+                    <div class="auth-links">
+                        <a href="#" onclick="showSignup()">Sign Up</a>
+                    </div>
+                </div>
+            `;
+        }
+
+        function showSignup() {
+            document.getElementById("presentation").style.display = "none";
+            document.getElementById("app").innerHTML = `
+                <div class="auth-container">
+                    <h1>Sign Up</h1>
+                    <div id="signup-error" class="error-message" style="display: none;"></div>
+                    <input type="text" id="signup-name" placeholder="Full Name">
+                    <input type="email" id="signup-email" placeholder="Email Address">
+                    <input type="password" id="signup-password" placeholder="Password">
+                    <input type="password" id="confirm-password" placeholder="Confirm Password">
+                    <button class="auth-btn" onclick="signup()">Sign Up</button>
+                    <div class="auth-links">
+                        <a href="#" onclick="showLogin()">Already have an account? Sign In</a>
+                    </div>
+                </div>
+            `;
+        }
+
+        function login() {
+            const email = document.getElementById("login-email").value;
+            const password = document.getElementById("login-password").value;
+            const now = new Date().toISOString();
+
+            // Check if email exists
+            const storedPassword = localStorage.getItem(`${email}_password`);
+            if (!storedPassword) {
+                showError('login-error', 'Email address not found. Please sign up first.');
+                return;
+            }
+
+            // Validate password
+            if (storedPassword !== password) {
+                showError('login-error', 'Incorrect password. Please try again.');
+                return;
+            }
+            
+            // Update user data and proceed with login
+            localStorage.setItem("currentUser", email);
+            localStorage.setItem(`${email}_lastLogin`, now);
+            
+            // Track activity
+            const today = new Date().toISOString().split('T')[0];
+            const week = getWeekNumber(new Date());
+            const month = new Date().toISOString().slice(0, 7);
+            
+            // Daily activity
+            let dailyActivity = JSON.parse(localStorage.getItem('dailyActivity') || '{}');
+            dailyActivity[today] = [...new Set([...(dailyActivity[today] || []), email])];
+            localStorage.setItem('dailyActivity', JSON.stringify(dailyActivity));
+            
+            // Weekly activity
+            let weeklyActivity = JSON.parse(localStorage.getItem('weeklyActivity') || '{}');
+            weeklyActivity[week] = [...new Set([...(weeklyActivity[week] || []), email])];
+            localStorage.setItem('weeklyActivity', JSON.stringify(weeklyActivity));
+            
+            // Monthly activity
+            let monthlyActivity = JSON.parse(localStorage.getItem('monthlyActivity') || '{}');
+            monthlyActivity[month] = [...new Set([...(monthlyActivity[month] || []), email])];
+            localStorage.setItem('monthlyActivity', JSON.stringify(monthlyActivity));
+
+            const connections = parseInt(localStorage.getItem(`${email}_connections`) || '0');
+            localStorage.setItem(`${email}_connections`, connections + 1);
+            
+            document.getElementById("navbar").style.display = "flex";
+            if (email === 'leo.tran@outlook.fr') {
+                document.getElementById("adminButton").style.display = "block";
+            }
+            navigate('offers');
+        }
+
+        function getWeekNumber(d) {
+            d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+            d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay()||7));
+            const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+            const weekNo = Math.ceil(((d - yearStart) / 86400000 + 1)/7);
+            return d.getUTCFullYear() + '-W' + weekNo;
+        }
+
+        function signup() {
+            const email = document.getElementById("signup-email").value;
+            const password = document.getElementById("signup-password").value;
+            const confirmPassword = document.getElementById("confirm-password").value;
+            const name = document.getElementById("signup-name").value;
+            const now = new Date().toISOString();
+
+            // Show error if email already exists
+            if (localStorage.getItem(`${email}_password`)) {
+                showError('signup-error', 'This email is already registered. Please login instead.');
+                return;
+            }
+
+            // Validate passwords match
+            if (password !== confirmPassword) {
+                showError('signup-error', 'Passwords do not match.');
+                return;
+            }
+
+            // Store user data
+            localStorage.setItem(`${email}_password`, password);
+            localStorage.setItem(`${email}_name`, name);
+            localStorage.setItem(`${email}_created`, now);
+            localStorage.setItem(`${email}_connections`, '0');
+            localStorage.setItem(`${email}_paid`, 'false');
+
+            // Automatically log in after signup
+            localStorage.setItem("currentUser", email);
+            document.getElementById("navbar").style.display = "flex";
+            navigate('offers');
+        }
+
+        function showError(elementId, message) {
+            const errorElement = document.getElementById(elementId);
+            errorElement.textContent = message;
+            errorElement.style.display = 'block';
+            setTimeout(() => {
+                errorElement.style.display = 'none';
+            }, 5000); // Hide error after 5 seconds
+        }
+
+        function loadOffers() {
+            document.getElementById("app").innerHTML = `
+                <div class="offers-container">
+                    <h1>Offers</h1>
+                    <button class="big-btn" onclick="loadYearCourses(1)">1st Year Courses</button>
+                    <button class="big-btn" onclick="loadYearCourses(2)">2nd Year Courses</button>
+                    <button class="big-btn" onclick="loadPacks()">Packs</button>
+                    <button class="big-btn" onclick="loadFreeDemo()">Free Demo</button>
+                </div>
+            `;
+        }
+
+        function loadPacks() {
+            document.getElementById("app").innerHTML = `
+                <div class="offers-container">
+                    <h1>Course Packs</h1>
+                    <button class="big-btn">1st Year Full First Semester's Courses</button>
+                    <button class="big-btn">1st Year Full Second Semester's Courses</button>
+                    <button class="big-btn">2nd Year Full First Semester's Courses</button>
+                    <button class="big-btn">2nd Year Full Second Semester's Courses</button>
+                    <button class="back-btn" onclick="loadOffers()">Back to Offers</button>
+                </div>
+            `;
+        }
+
+        function loadFreeDemo() {
+            document.getElementById("app").innerHTML = `
+                <div class="offers-container">
+                    <h1>Free Demo Course</h1>
+                    <button class="big-btn" onclick="loadMarketingFundamentals()">Marketing Fundamentals</button>
+                    <button class="back-btn" onclick="loadOffers()">Back to Offers</button>
+                </div>
+            `;
+        }
+
+        function loadYearCourses(year) {
+            document.getElementById("app").innerHTML = `
+                <div class="offers-container">
+                    <h1>${year}st Year Courses</h1>
+                    <button class="big-btn" onclick="loadSemesterCourses(${year}, 1)">Semester 1</button>
+                    <button class="big-btn" onclick="loadSemesterCourses(${year}, 2)">Semester 2</button>
+                    <button class="back-btn" onclick="loadOffers()">Back to Offers</button>
+                </div>
+            `;
+        }
+
+        function loadSemesterCourses(year, semester) {
+            let courses = {
+                "1-1": ["Applied Business Mathematics", "Financial Accounting", "Management Tools and Principles", "Marketing Fundamentals"],
+                "1-2": ["Mathematics For Management", "Introduction To Programming", "Cost Accounting", "Microeconomics"],
+                "2-1": ["Business Driven-Information", "Corporate Finance", "Macroeconomics", "Marketing Management", "Statistics & Data Analysis"],
+                "2-2": ["Capital Markets", "Financial Reporting & Analysis", "Global Economic Environment", "Operations Management", "Organizational Behavior"]
+            };
+
+            let courseList = courses[`${year}-${semester}`]
+                .map(course => `<button class="big-btn">${course}</button>`)
+                .join("");
+
+            document.getElementById("app").innerHTML = `
+                <div class="offers-container">
+                    <h1>${year}st Year - Semester ${semester}</h1>
+                    ${courseList}
+                    <button class="back-btn" onclick="loadYearCourses(${year})">Back to ${year}st Year</button>
+                </div>
+            `;
+        }
+
+        function loadMyCourses() {
+            const courses = {
+                "1-1": ["Applied Business Mathematics", "Financial Accounting", "Management Tools and Principles", "Marketing Fundamentals"],
+                "1-2": ["Mathematics For Management", "Introduction To Programming", "Cost Accounting", "Microeconomics"],
+                "2-1": ["Business Driven-Information", "Corporate Finance", "Macroeconomics", "Marketing Management", "Statistics & Data Analysis"],
+                "2-2": ["Capital Markets", "Financial Reporting & Analysis", "Global Economic Environment", "Operations Management", "Organizational Behavior"]
+            };
+
+            const semesters = {
+                "1-1": "1st Year First Semester",
+                "1-2": "1st Year Second Semester",
+                "2-1": "2nd Year First Semester",
+                "2-2": "2nd Year Second Semester"
+            };
+
+            document.getElementById("app").innerHTML = `
+                <div class="offers-container">
+                    <h1>My Courses</h1>
+                    ${Object.entries(semesters).map(([id, title]) => `
+                        <div class="semester-section">
+                            <h2>${title}</h2>
+                            <div class="courses-grid">
+                                ${courses[id].map(course => `
+                                    <button class="course-button" onclick="loadCourse('${encodeURIComponent(course)}')">${course}</button>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        function loadCourse(courseName) {
+            const decodedName = decodeURIComponent(courseName);
+            document.getElementById("app").innerHTML = `
+                <div class="offers-container">
+                    <h1>${decodedName}</h1>
+                    <div class="course-navigation">
+                        <button class="course-nav-btn active" onclick="showCourseSection('${encodeURIComponent(courseName)}', 'class')">Class</button>
+                        <button class="course-nav-btn" onclick="showCourseSection('${encodeURIComponent(courseName)}', 'exercises')">Exercises</button>
+                        <button class="course-nav-btn" onclick="showCourseSection('${encodeURIComponent(courseName)}', 'progress')">Progress</button>
+                    </div>
+                    <div id="course-content" class="course-content-section">
+                        <h2>Welcome to ${decodedName}</h2>
+                        <p>Select a section above to begin your learning journey:</p>
+                        <ul>
+                            <li><strong>Class:</strong> Access lecture materials, videos, and course content</li>
+                            <li><strong>Exercises:</strong> Practice with interactive exercises and assignments</li>
+                            <li><strong>Progress:</strong> Track your learning progress and achievements</li>
+                        </ul>
+                    </div>
+                    <button class="back-btn" onclick="loadMyCourses()">Back to My Courses</button>
+                </div>
+            `;
+        }
+
+        function showCourseSection(courseName, section) {
+            const decodedName = decodeURIComponent(courseName);
+            const content = document.getElementById('course-content');
+            
+            // Update navigation buttons
+            document.querySelectorAll('.course-nav-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.textContent.toLowerCase() === section) {
+                    btn.classList.add('active');
+                }
+            });
+
+            // Update content based on section
+            switch(section) {
+                case 'class':
+                    content.innerHTML = `
+                        <h2>Class Materials</h2>
+                        <div class="course-materials">
+                            <button class="course-button">Lecture Notes</button>
+                            <button class="course-button">Video Lectures</button>
+                            <button class="course-button">Supplementary Materials</button>
+                            <button class="course-button">Discussion Forum</button>
+                        </div>
+                    `;
+                    break;
+                case 'exercises':
+                    content.innerHTML = `
+                        <h2>Practice Exercises</h2>
+                        <div class="course-materials">
+                            <button class="course-button">Weekly Assignments</button>
+                            <button class="course-button">Practice Problems</button>
+                            <button class="course-button">Interactive Quizzes</button>
+                            <button class="course-button">Group Projects</button>
+                        </div>
+                    `;
+                    break;
+                case 'progress':
+                    content.innerHTML = `
+                        <h2>Your Progress</h2>
+                        <div class="course-materials">
+                            <button class="course-button">Grade Overview</button>
+                            <button class="course-button">Completed Tasks</button>
+                            <button class="course-button">Learning Analytics</button>
+                            <button class="course-button">Achievement Badges</button>
+                        </div>
+                    `;
+                    break;
+            }
+        }
+
+        function loadUserInfo() {
+            document.getElementById("app").innerHTML = `
+                <h1>My Information</h1>
+                <p><strong>Email:</strong> ${localStorage.getItem("currentUser")}</p>
+                <button class="logout-btn" onclick="logout()">Logout</button>
+            `;
+        }
+
+        function loadAdminPanel() {
+            const allUsers = Object.keys(localStorage)
+                .filter(key => key.includes('@') && key.endsWith('_created'))
+                .map(key => {
+                    const email = key.replace('_created', '');
+                    const lastLogin = localStorage.getItem(`${email}_lastLogin`) || new Date().toISOString();
+                    const connections = parseInt(localStorage.getItem(`${email}_connections`) || '0');
+                    const created = localStorage.getItem(`${email}_created`);
+                    const paid = localStorage.getItem(`${email}_paid`) === 'true';
+                    const name = localStorage.getItem(`${email}_name`) || email.split('@')[0];
+                    const sponsorships = parseInt(localStorage.getItem(`${email}_sponsorships`) || '0');
+                    return { email, name, paid, created, connections, lastLogin, sponsorships };
+                });
+
+            const totalUsers = allUsers.length;
+            const paidAccounts = allUsers.filter(user => user.paid).length;
+            const totalSponsorships = allUsers.reduce((sum, user) => sum + user.sponsorships, 0);
+            
+            document.getElementById("app").innerHTML = `
+                <div class="admin-container">
+                    <h1>Admin Dashboard</h1>
+                    <div class="admin-nav">
+                        <button class="admin-nav-btn active" onclick="showAdminSection('metrics')">Key Metrics</button>
+                        <button class="admin-nav-btn" onclick="showAdminSection('users')">Users Information</button>
+                    </div>
+                    
+                    <div id="metrics-section" class="admin-section active">
+                        <h2>Key Metrics</h2>
+                        <div class="metrics-grid">
+                            <div class="metric-card">
+                                <h3>Total Users</h3>
+                                <p>${totalUsers}</p>
+                            </div>
+                            <div class="metric-card">
+                                <h3>Paid Accounts</h3>
+                                <p>${paidAccounts}</p>
+                            </div>
+                            <div class="metric-card">
+                                <h3>Total Sponsorships</h3>
+                                <p>${totalSponsorships}</p>
+                            </div>
+                        </div>
+
+                        <div class="activity-charts">
+                            <div class="chart-container">
+                                <h3>Daily Active Users</h3>
+                                <canvas id="dailyChart"></canvas>
+                            </div>
+                            <div class="chart-container">
+                                <h3>Weekly Active Users</h3>
+                                <canvas id="weeklyChart"></canvas>
+                            </div>
+                            <div class="chart-container">
+                                <h3>Monthly Active Users</h3>
+                                <canvas id="monthlyChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="users-section" class="admin-section">
+                        <h2>Users Information</h2>
+                        <div class="account-summary">
+                            <div class="summary-card">
+                                <h3>Total Accounts</h3>
+                                <p>${totalUsers}</p>
+                            </div>
+                            <div class="summary-card">
+                                <h3>Premium Accounts</h3>
+                                <p>${paidAccounts}</p>
+                            </div>
+                            <div class="summary-card">
+                                <h3>Total Sponsorships</h3>
+                                <p>${totalSponsorships}</p>
+                            </div>
+                        </div>
+                        <div class="table-container">
+                            <table class="admin-table">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Email</th>
+                                        <th>Account Status</th>
+                                        <th>Sponsorships</th>
+                                        <th>Date of Creation</th>
+                                        <th>Number of Connections</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${allUsers.map(user => `
+                                        <tr>
+                                            <td>${user.name}</td>
+                                            <td>${user.email}</td>
+                                            <td>${user.paid ? '<span class="status-paid">Paid</span>' : '<span class="status-unpaid">Unpaid</span>'}</td>
+                                            <td>${user.sponsorships}</td>
+                                            <td>${new Date(user.created).toLocaleDateString()}</td>
+                                            <td class="connections-count">${user.connections}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Create charts after DOM is ready
+            setTimeout(() => {
+                // Daily Chart
+                new Chart(document.getElementById('dailyChart'), {
+                    type: 'line',
+                    data: {
+                        labels: Array.from({length: 7}, (_, i) => {
+                            const d = new Date();
+                            d.setDate(d.getDate() - i);
+                            return d.toISOString().split('T')[0];
+                        }).reverse(),
+                        datasets: [{
+                            label: 'Daily Active Users',
+                            data: Array.from({length: 7}, (_, i) => {
+                                const d = new Date();
+                                d.setDate(d.getDate() - i);
+                                const dailyActivity = JSON.parse(localStorage.getItem('dailyActivity') || '{}');
+                                return (dailyActivity[d.toISOString().split('T')[0]] || []).length;
+                            }).reverse(),
+                            borderColor: '#1E3A5F',
+                            tension: 0.1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: { stepSize: 1 }
+                            }
+                        }
+                    }
+                });
+
+                // Weekly Chart
+                new Chart(document.getElementById('weeklyChart'), {
+                    type: 'line',
+                    data: {
+                        labels: Array.from({length: 4}, (_, i) => {
+                            const d = new Date();
+                            d.setDate(d.getDate() - (i * 7));
+                            return getWeekNumber(d);
+                        }).reverse(),
+                        datasets: [{
+                            label: 'Weekly Active Users',
+                            data: Array.from({length: 4}, (_, i) => {
+                                const d = new Date();
+                                d.setDate(d.getDate() - (i * 7));
+                                const weeklyActivity = JSON.parse(localStorage.getItem('weeklyActivity') || '{}');
+                                return (weeklyActivity[getWeekNumber(d)] || []).length;
+                            }).reverse(),
+                            borderColor: '#1E3A5F',
+                            tension: 0.1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: { stepSize: 1 }
+                            }
+                        }
+                    }
+                });
+
+                // Monthly Chart
+                new Chart(document.getElementById('monthlyChart'), {
+                    type: 'line',
+                    data: {
+                        labels: Array.from({length: 6}, (_, i) => {
+                            const d = new Date();
+                            d.setMonth(d.getMonth() - i);
+                            return d.toISOString().slice(0, 7);
+                        }).reverse(),
+                        datasets: [{
+                            label: 'Monthly Active Users',
+                            data: Array.from({length: 6}, (_, i) => {
+                                const d = new Date();
+                                d.setMonth(d.getMonth() - i);
+                                const monthlyActivity = JSON.parse(localStorage.getItem('monthlyActivity') || '{}');
+                                return (monthlyActivity[d.toISOString().slice(0, 7)] || []).length;
+                            }).reverse(),
+                            borderColor: '#1E3A5F',
+                            tension: 0.1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: { stepSize: 1 }
+                            }
+                        }
+                    }
+                });
+            }, 0);
+        }
+
+        function showAdminSection(section) {
+            // Update button states
+            document.querySelectorAll('.admin-nav-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.textContent.toLowerCase().includes(section)) {
+                    btn.classList.add('active');
+                }
+            });
+
+            // Update section visibility with animation
+            const metricsSection = document.getElementById('metrics-section');
+            const usersSection = document.getElementById('users-section');
+
+            if (section === 'metrics') {
+                usersSection.classList.remove('active');
+                setTimeout(() => {
+                    metricsSection.classList.add('active');
+                }, 50);
+            } else {
+                metricsSection.classList.remove('active');
+                setTimeout(() => {
+                    usersSection.classList.add('active');
+                }, 50);
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem("currentUser");
+            document.getElementById("navbar").style.display = "none";
+            document.getElementById("presentation").style.display = "flex";
+            document.getElementById("app").innerHTML = "";
+        }
+
+        function loadMarketingFundamentals() {
+            document.getElementById("app").innerHTML = `
+                <div class="offers-container">
+                    <h1>Marketing Fundamentals</h1>
+                    <div class="course-navigation">
+                        <button class="course-nav-btn active" onclick="showMarketingSection('class')">Class</button>
+                        <button class="course-nav-btn" onclick="showMarketingSection('exercises')">Exercises</button>
+                        <button class="course-nav-btn" onclick="showMarketingSection('progress')">Progress</button>
+                    </div>
+                    <div id="course-content" class="course-content-section">
+                        <h2>Course Summary</h2>
+                        <p>Welcome to Marketing Fundamentals! This course covers essential marketing concepts, strategies, and modern business practices.</p>
+                        
+                        <h2>Definitions by Chapter</h2>
+                        <div class="chapter-buttons">
+                            <button class="chapter-btn active" onclick="showChapterDefinitions(1)">Chapter 1</button>
+                            <button class="chapter-btn" onclick="showChapterDefinitions(2)">Chapter 2</button>
+                            <button class="chapter-btn" onclick="showChapterDefinitions(3)">Chapter 3</button>
+                            <button class="chapter-btn" onclick="showChapterDefinitions(4)">Chapter 4</button>
+                            <button class="chapter-btn" onclick="showChapterDefinitions(5)">Chapter 5</button>
+                            <button class="chapter-btn" onclick="showChapterDefinitions(6)">Chapter 6</button>
+                            <button class="chapter-btn" onclick="showChapterDefinitions(7)">Chapter 7</button>
+                        </div>
+                        <div id="chapter-definitions"></div>
+                    </div>
+                    <button class="back-btn" onclick="loadFreeDemo()">Back to Free Demo</button>
+                </div>
+            `;
+            showChapterDefinitions(1);
+        }
+
+        // Store understanding states in localStorage
+        function getUnderstandingState(chapter, index) {
+            const states = JSON.parse(localStorage.getItem('understandingStates') || '{}');
+            return states[`${chapter}-${index}`] || null;
+        }
+
+        function setUnderstandingState(chapter, index, state) {
+            const states = JSON.parse(localStorage.getItem('understandingStates') || '{}');
+            if (state === null) {
+                delete states[`${chapter}-${index}`];
+            } else {
+                states[`${chapter}-${index}`] = state;
+            }
+            localStorage.setItem('understandingStates', JSON.stringify(states));
+        }
+
+        function markUnderstanding(chapter, index, state) {
+            const card = document.getElementById(`def-${chapter}-${index}`);
+            card.classList.remove('understood', 'not-understood');
+            
+            const buttons = card.querySelectorAll('.understanding-btn');
+            buttons.forEach(btn => btn.classList.remove('active'));
+
+            if (state === null) {
+                setUnderstandingState(chapter, index, null);
+            } else {
+                card.classList.add(state ? 'understood' : 'not-understood');
+                buttons[state ? 0 : 1].classList.add('active');
+                setUnderstandingState(chapter, index, state);
+            }
+        }
+
+        function showChapterDefinitions(chapter) {
+            const chapters = {
+                1: [
+                    { term: 'Needs', definition: 'States of felt deprivation' },
+                    { term: 'Wants', definition: 'The form human needs take as they are shaped by culture and individual personality' },
+                    { term: 'Demands', definition: 'Human wants that are backed by buying power' },
+                    { term: 'Market offerings', definition: 'Combinations of products, services, info or experiences offered to a market to satisfy needs or wants' },
+                    { term: 'Marketing myopia', definition: 'Paying more attention to the product that the benefits and experiences produced' },
+                    { term: 'Consumer market', definition: 'Consumers search for products, interact with companies to obtain information and make purchases' },
+                    { term: 'Marketing management', definition: 'Choosing target markets and building profitable relationship with them' },
+                    { term: 'Value proposition', definition: 'Set of benefits or values it promises to deliver to customers to satisfy their needs' },
+                    { term: 'Value driven marketing strategy', definition: 'Production/product/selling/marketing/societal marketing concepts' },
+                    { term: 'Societal marketing', definition: 'Consider consumers wants, company requirements, consumers long run interests and society long run interests' },
+                    { term: 'Marketing mix', definition: 'Product/price/promotion/place' },
+                    { term: 'Integrated marketing', definition: 'Plan that communicates and delivers intended value' },
+                    { term: 'Customer relationship management', definition: 'The overall process of building and maintaining profitable customer relationships by delivering superior customer value and satisfaction' },
+                    { term: 'Customer perceived value', definition: 'Difference btw total customer perceived benefits and customer cost' },
+                    { term: 'Customer engagement marketing', definition: 'Direct and continuous customer involvement' },
+                    { term: 'Consumer generated marketing', definition: 'Brand exchanges created by consumers themselves' },
+                    { term: 'Partner relationship management', definition: 'Working with partners in other company departments and outside the company' },
+                    { term: 'Customer lifetime value', definition: 'Value of entire stream of purchases that the customer would make over a lifetime of patronage' },
+                    { term: 'Customer satisfaction', definition: 'The extent to which perceived performance matches a buyer\'s expectations' },
+                    { term: 'Share of customer', definition: 'Portion of the customers purchasing that a company gets in its product categories' },
+                    { term: 'Customer equity', definition: 'Total combined customer lifetime values of all of the company\'s customers' }
+                ],
+                2: [
+                    { term: 'Strategic planning', definition: 'Process of developing and maintaining a strategic fit between the organization\'s goals and capabilities and its changing marketing opportunities' },
+                    { term: 'Mission statement', definition: 'The organization\'s purpose, what it wants to accomplish in the larger environment' },
+                    { term: 'Business objectives', definition: 'Build profitable customer relationship/invest in research/improve profits' },
+                    { term: 'Marketing objectives', definition: 'Increase market share/create local partnership/increase promotion' },
+                    { term: 'Business portfolio', definition: 'Collection of businesses and products that make up the company' },
+                    { term: 'Portfolio analysis', definition: 'Major activity in strategic planning whereby management evaluates the products and businesses that make up the company' },
+                    { term: 'Strategic business units', definition: 'Company division/product line within a division/single product or brand' },
+                    { term: 'Downsizing', definition: 'A company must harvest or divest businesses that are unprofitable or that no longer fit the strategy' },
+                    { term: 'Value chain', definition: 'Series of departments that carry out value creating activities to design, produce, market, deliver and support a firm\'s product' },
+                    { term: 'Value delivery network', definition: 'Made up of companies suppliers, distributors, customers who partner with each other to improve performance of the entire system' }
+                ],
+                3: [
+                    { term: 'Marketing environment', definition: 'Includes the actors and forces outside marketing that affect marketing management\'s ability to build and maintain successful relationships with target customers' },
+                    { term: 'Microenvironment', definition: 'Consists of the actors close to the company that affect its ability to serve its customers' },
+                    { term: 'Macroenvironments', definition: 'Consists of the larger societal forces that affect the microenvironment' },
+                    { term: 'Marketing intermediaries', definition: 'Are firms that help the company to promote, finance, sell, and distribute its goods to final buyers' },
+                    { term: 'Publics', definition: 'Any group that has an actual or potential interest in or impact on an organization\'s ability to achieve its objectives' },
+                    { term: 'Demographic environment', definition: 'Study of human populations size, density, location, age, gender, race, occupation' },
+                    { term: 'Demographic trends', definition: 'Include changing age and family structures, geographic population shifts, educational characteristics, and population diversity' }
+                ],
+                4: [
+                    { term: 'Customer insights', definition: 'Fresh marketing information-based understandings of customers and the marketplace' },
+                    { term: 'Big data', definition: 'Huge and complex data sets generated by today\'s sophisticated information technologies' },
+                    { term: 'Marketing information ecosystem', definition: 'People, processes, and assets dedicated to assessing managers\' information needs' },
+                    { term: 'Marketing information system', definition: 'Provides information to the company\'s marketing and other managers and external partners' },
+                    { term: 'Internal data', definition: 'Collections of consumers and market info obtained from data sources within the company network' },
+                    { term: 'Marketing research', definition: 'Systematic design, collection, analysis and reporting of data relevant to a specific marketing situation' }
+                ],
+                5: [
+                    { term: 'Consumer buyer behavior', definition: 'Buying behavior of final consumers and households that buy goods and services for personal consumption' },
+                    { term: 'Consumer market', definition: 'All the individuals and households that buy goods and services for personal consumption' },
+                    { term: 'Cultural factors', definition: 'Set of basic values, perceptions, wants and behavior learned by a member of society' },
+                    { term: 'Subcultures', definition: 'Groups of people within a culture with shared value systems based on common life experiences' },
+                    { term: 'Social factors', definition: 'Family/role and status' },
+                    { term: 'Personal factors', definition: 'Lifestyle/personality/age/occupations' },
+                    { term: 'Psychological factors', definition: 'Motivation/perception/learning/beliefs and attitudes' },
+                    { term: 'Motivation research', definition: 'Qualitative research designed to probe consumer\'s hidden subconscious motivations' }
+                ],
+                6: [
+                    { term: 'Business buyer behavior', definition: 'Buying behavior of organizations that buy goods and services for use in production' },
+                    { term: 'Business market', definition: 'Fewer but larger buyers/derived demand/inelastic demand/fluctuating demand' },
+                    { term: 'Straight rebuy', definition: 'The buyer routinely reorders something without any modifications' },
+                    { term: 'Modified rebuy', definition: 'Buyer wants to modify product specifications, prices, terms or suppliers' },
+                    { term: 'New task', definition: 'Buyer purchases a product or service for the first time' },
+                    { term: 'System selling', definition: 'Buying a complete solution to a problem from a single seller' },
+                    { term: 'Buying center', definition: 'All the participants in the business purchase decision making process' },
+                    { term: 'Deciders', definition: 'Formal or informal power to select and approve final suppliers' }
+                ],
+                7: [
+                    { term: 'Market segmentation', definition: 'Dividing a market into smaller segments with distinct needs or characteristics' },
+                    { term: 'Geographic segmentation', definition: 'Different geographical units such as nations, regions, states, counties, cities' },
+                    { term: 'Demographic segmentation', definition: 'Age, life cycle stage, gender, income, occupations, educations, religion, ethnicity' },
+                    { term: 'Psychographic segmentation', definition: 'Social class, lifestyle, personality' },
+                    { term: 'Behavioral segmentation', definition: 'Consumer knowledge, attitudes, uses of a product, responses to a product' },
+                    { term: 'Multiple segmentation', definition: 'Identify smaller and better defined target groups' },
+                    { term: 'Target market', definition: 'Set of buyers who share common needs or characteristics that the company decides to serve' },
+                    { term: 'Local marketing', definition: 'Tailoring brands and promotion to the needs and wants of local customer segments' }
+                ]
+            };
+
+            document.querySelectorAll('.chapter-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.textContent === `Chapter ${chapter}`) {
+                    btn.classList.add('active');
+                }
+            });
+
+            const definitions = chapters[chapter] || [];
+            const container = document.getElementById('chapter-definitions');
+            
+            container.innerHTML = `
+                <h2 class="chapter-title">Chapter ${chapter} Definitions</h2>
+                <div class="chapter-content">
+                    ${definitions.map((def, index) => {
+                        const state = getUnderstandingState(chapter, index);
+                        const stateClass = state === true ? 'understood' : state === false ? 'not-understood' : '';
+                        return `
+                            <div class="definition-card ${stateClass}" id="def-${chapter}-${index}">
+                                <div class="definition-content">
+                                    <div class="definition-term">${def.term}</div>
+                                    <div class="definition-text">${def.definition}</div>
+                                </div>
+                                <div class="understanding-controls">
+                                    <button class="understanding-btn ${state === true ? 'active' : ''}" onclick="markUnderstanding(${chapter}, ${index}, true)">Understood</button>
+                                    <button class="understanding-btn ${state === false ? 'active' : ''}" onclick="markUnderstanding(${chapter}, ${index}, false)">Review Later</button>
+                                    <button class="understanding-btn reset" onclick="markUnderstanding(${chapter}, ${index}, null)">Reset</button>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+                ${chapter === 1 ? `
+                    <div class="concept-diagram">
+                        <div class="concept-headers">
+                            <span>Starting point</span>
+                            <span>Focus</span>
+                            <span>Means</span>
+                            <span>Ends</span>
+                        </div>
+                        
+                        <div class="concept-row-container">
+                            <div class="concept-title selling">The selling concept</div>
+                            <div class="concept-row selling">
+                                <div class="concept-content">
+                                    <div class="concept-item">
+                                        <span class="concept-highlight">Factory</span>
+                                    </div>
+                                    <div class="concept-item">
+                                        <span>Existing products</span>
+                                    </div>
+                                    <div class="concept-item">
+                                        <span>Selling and promoting</span>
+                                    </div>
+                                    <div class="concept-item">
+                                        <span class="concept-highlight">Profits through sales volume</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="concept-row-container">
+                            <div class="concept-title marketing">The marketing concept</div>
+                            <div class="concept-row marketing">
+                                <div class="concept-content">
+                                    <div class="concept-item">
+                                        <span class="concept-highlight">Market</span>
+                                    </div>
+                                    <div class="concept-item">
+                                        <span>Customer needs</span>
+                                    </div>
+                                    <div class="concept-item">
+                                        <span>Integrated marketing</span>
+                                    </div>
+                                    <div class="concept-item">
+                                        <span class="concept-highlight">Profits through customer satisfaction</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                ` : ''}
+            `;
+        }
+
+        function showMarketingSection(section) {
+            const content = document.getElementById('course-content');
+            
+            document.querySelectorAll('.course-nav-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.textContent.toLowerCase() === section) {
+                    btn.classList.add('active');
+                }
+            });
+
+            if (section === 'class') {
+                content.innerHTML = `
+                    <h2>Course Summary</h2>
+                    <p>Welcome to Marketing Fundamentals! This course covers essential marketing concepts, strategies, and modern business practices.</p>
+                    
+                    <h2>Definitions by Chapter</h2>
+                    <div class="chapter-buttons">
+                        <button class="chapter-btn active" onclick="showChapterDefinitions(1)">Chapter 1</button>
+                        <button class="chapter-btn" onclick="showChapterDefinitions(2)">Chapter 2</button>
+                        <button class="chapter-btn" onclick="showChapterDefinitions(3)">Chapter 3</button>
+                        <button class="chapter-btn" onclick="showChapterDefinitions(4)">Chapter 4</button>
+                        <button class="chapter-btn" onclick="showChapterDefinitions(5)">Chapter 5</button>
+                        <button class="chapter-btn" onclick="showChapterDefinitions(6)">Chapter 6</button>
+                        <button class="chapter-btn" onclick="showChapterDefinitions(7)">Chapter 7</button>
+                    </div>
+                    <div id="chapter-definitions"></div>
+                `;
+                showChapterDefinitions(1);
+            } else if (section === 'exercises') {
+                content.innerHTML = `
+                    <h2>Practice Exercises</h2>
+                    <div class="course-materials">
+                        <button class="course-button">Chapter Quizzes</button>
+                        <button class="course-button">Case Studies</button>
+                        <button class="course-button">Marketing Plan Project</button>
+                        <button class="course-button">Discussion Topics</button>
+                    </div>
+                `;
+            } else if (section === 'progress') {
+                content.innerHTML = `
+                    <h2>Your Progress</h2>
+                    <div class="course-materials">
+                        <button class="course-button">Completion Status</button>
+                        <button class="course-button">Quiz Scores</button>
+                        <button class="course-button">Project Grades</button>
+                        <button class="course-button">Learning Path</button>
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>

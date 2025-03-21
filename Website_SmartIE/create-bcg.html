@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Create BCG Matrix</title>
+</head>
+<body>
+    <canvas id="bcgCanvas" width="600" height="600"></canvas>
+    <script>
+        const canvas = document.getElementById('bcgCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Set white background
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, 600, 600);
+        
+        // Draw axes
+        ctx.beginPath();
+        ctx.moveTo(50, 50);
+        ctx.lineTo(50, 550);
+        ctx.lineTo(550, 550);
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        
+        // Draw grid lines
+        ctx.beginPath();
+        ctx.moveTo(300, 50);
+        ctx.lineTo(300, 550);
+        ctx.moveTo(50, 300);
+        ctx.lineTo(550, 300);
+        ctx.strokeStyle = '#ccc';
+        ctx.stroke();
+        
+        // Add labels
+        ctx.font = '16px Arial';
+        ctx.fillStyle = '#000';
+        
+        // Y-axis label
+        ctx.save();
+        ctx.translate(30, 300);
+        ctx.rotate(-Math.PI/2);
+        ctx.textAlign = 'center';
+        ctx.fillText('Market Growth Rate', 0, 0);
+        ctx.restore();
+        
+        // X-axis label
+        ctx.textAlign = 'center';
+        ctx.fillText('Relative Market Share', 300, 580);
+        
+        // Quadrant labels
+        ctx.font = 'bold 20px Arial';
+        // Question Mark
+        ctx.fillText('?', 175, 175);
+        ctx.fillText('Question Mark', 175, 200);
+        
+        // Star
+        ctx.fillText('★', 425, 175);
+        ctx.fillText('Star', 425, 200);
+        
+        // Dog
+        ctx.fillText('🐕', 175, 425);
+        ctx.fillText('Dog', 175, 450);
+        
+        // Cash Cow
+        ctx.fillText('🐄', 425, 425);
+        ctx.fillText('Cash Cow', 425, 450);
+        
+        // Add arrows at the end of axes
+        ctx.beginPath();
+        // Y-axis arrow
+        ctx.moveTo(50, 50);
+        ctx.lineTo(45, 60);
+        ctx.lineTo(55, 60);
+        ctx.closePath();
+        ctx.fillStyle = '#000';
+        ctx.fill();
+        
+        // X-axis arrow
+        ctx.beginPath();
+        ctx.moveTo(550, 550);
+        ctx.lineTo(540, 545);
+        ctx.lineTo(540, 555);
+        ctx.closePath();
+        ctx.fill();
+        
+        // Save as PNG
+        const link = document.createElement('a');
+        link.download = 'bcg-matrix.png';
+        link.href = canvas.toDataURL();
+        link.click();
+    </script>
+</body>
+</html>
